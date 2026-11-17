@@ -1,0 +1,53 @@
+name: Ange chat + Web — mise en ligne
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    - cron: '17 */3 * * *'   # récupère la dernière version de l'application toutes les 3 heures
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: ange-chat-web
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Code de l'application (branche unichat-plus)
+        uses: actions/checkout@v4
+        with:
+          repository: glomboto5-cmd/plateforme-scolaire-rdc-site
+          ref: unichat-plus
+          path: app
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Construire la version web
+        working-directory: app
+        run: |
+          npm install --no-audit --no-fund
+          node -e "const f='app.json';const j=require('./'+f);j.expo.experiments=Object.assign({},j.expo.experiments,{baseUrl:'/ange-chat-plus'});require('fs').writeFileSync(f,JSON.stringify(j,null,2))"
+          npx expo export --platform web --output-dir ../site
+          cp assets/icon.png ../site/icon.png || true
+          cp ../site/index.html ../site/404.html
+          touch ../site/.nojekyll
+
+      - name: Publier sur la branche gh-pages
+        run: |
+          cd site
+          git init -q -b gh-pages
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -qm "Ange chat + Web $(date -u +%Y-%m-%dT%H:%M)"
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" gh-pages
